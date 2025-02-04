@@ -1,110 +1,155 @@
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
   View,
+  Text,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from 'react-native';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+const { width, height } = Dimensions.get('window');
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+const App = () => {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardOpen(true);
+    });
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardOpen(false);
+    });
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  const fetchResults = async (text) => {
+    try {
+      const response = await fetch(
+        `https://be-v2.convose.com/autocomplete/interests?q=${text}&limit=12&from=0`,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            Authorization: 'Jy8RZCXvvc6pZQUu2QZ2',
           },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+        }
+      );
+      const data = await response.json();
+      const sortedResults = data.autocomplete.sort((a, b) => {
+        if (query === '') {
+          return b.match - a.match; // Sort by popularity if no query
+        }
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+      setResults(sortedResults.reverse()); // Invert order for bottom-to-top scrolling
+    } catch (error) {
+      console.error('Error fetching search results:', error);
+    }
   };
 
-  return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+  const handleSearch = (text) => {
+    setQuery(text);
+    fetchResults(text);
+  };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity style={styles.resultItem}>
+      <View style={styles.textContainer}>
+        <Text style={styles.primaryText}>{item.name}</Text>
+        {item.name.includes("[") && (
+          <Text style={styles.secondaryText}>{item.name.match(/\[(.*)\]/)?.[1]}</Text>
+        )}
+      </View>
+    </TouchableOpacity>
   );
-}
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <FlatList
+        data={results}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContainer}
+        inverted
+        keyboardShouldPersistTaps="handled"
+      />
+      <View
+        style={[
+          styles.searchBarContainer,
+          keyboardOpen && { bottom: height * 0.1 },
+        ]}
+      >
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search..."
+          value={query}
+          onChangeText={handleSearch}
+        />
+      </View>
+    </KeyboardAvoidingView>
+  );
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingHorizontal: width * 0.04,
+    paddingTop: height * 0.02,
+    paddingBottom: height * 0.04,
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+  listContainer: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
   },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
+  searchBarContainer: {
+    position: 'absolute',
+    bottom: height * 0.02,
+    left: width * 0.15, 
+    width: width * 0.7,
+    backgroundColor: '#f8f8f8',
+    borderRadius: width * 0.06,
+    borderWidth: 1,
+    borderColor: '#ccc',
   },
-  highlight: {
-    fontWeight: '700',
+  searchInput: {
+    height: height * 0.06,
+    paddingHorizontal: width * 0.04,
+    fontSize: width * 0.045,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: height * 0.015,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  textContainer: {
+    flexDirection: 'row',
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  primaryText: {
+    fontSize: width * 0.045,
+    fontWeight: 'bold',
+  },
+  secondaryText: {
+    fontSize: width * 0.04,
+    color: '#888',
+    marginLeft: width * 0.02,
   },
 });
 
