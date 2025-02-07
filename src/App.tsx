@@ -17,6 +17,7 @@ const { width, height } = Dimensions.get('window');
 const App = () => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+  const [mostPopular, setMostPopular] = useState(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -45,13 +46,28 @@ const App = () => {
         }
       );
       const data = await response.json();
-      const sortedResults = data.autocomplete.sort((a, b) => {
-        if (query === '') {
-          return b.match - a.match; // Sort by popularity if no query
-        }
-        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-      });
-      setResults(sortedResults.reverse()); // Invert order for bottom-to-top scrolling
+
+      if (!data.autocomplete || data.autocomplete.length === 0) {
+        setResults([]);
+        setMostPopular(null);
+        return;
+      }
+
+      //To determine the most popular item (highest match value)
+      const mostPopularItem = data.autocomplete.reduce((prev, curr) =>
+        prev.match > curr.match ? prev : curr, data.autocomplete[0]
+      );
+
+      setMostPopular(mostPopularItem);
+
+      //To filter and sort results alphabetically (excluding the most popular)
+      const filteredResults = data.autocomplete
+        .filter(item => item.id !== mostPopularItem.id)
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+      //To ensure bottom-to-top rendering with most popular at the bottom
+      setResults([...filteredResults, mostPopularItem]);
+
     } catch (error) {
       console.error('Error fetching search results:', error);
     }
@@ -63,7 +79,7 @@ const App = () => {
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.resultItem}>
+    <TouchableOpacity style={[styles.resultItem, item.id === mostPopular?.id && styles.popularItem]}>
       <View style={styles.textContainer}>
         <Text style={styles.primaryText}>{item.name}</Text>
         {item.name.includes("[") && (
@@ -78,14 +94,14 @@ const App = () => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContainer}
-        inverted
-        keyboardShouldPersistTaps="handled"
-      />
+      <View style={styles.listContainer}>
+        <FlatList
+          data={results.slice().reverse()} // To Render from bottom to top
+          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          renderItem={renderItem}
+          keyboardShouldPersistTaps="handled"
+        />
+      </View>
       <View
         style={[
           styles.searchBarContainer,
@@ -112,8 +128,8 @@ const styles = StyleSheet.create({
     paddingBottom: height * 0.04,
   },
   listContainer: {
-    flexGrow: 1,
-    justifyContent: 'flex-end',
+    flex: 1,
+    marginBottom: height * 0.08, // Ensure list appears above search bar
   },
   searchBarContainer: {
     position: 'absolute',
@@ -136,6 +152,9 @@ const styles = StyleSheet.create({
     padding: height * 0.015,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  popularItem: {
+    backgroundColor: '#e6f7ff', //To highlight for most popular item
   },
   textContainer: {
     flexDirection: 'row',
